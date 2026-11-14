@@ -21,13 +21,21 @@ class WorkspaceSwitcherPopup extends SwitcherPopup {
         this._popupTimeout = options.popupTimeout;
         this._enablePopupWorkspaceHover = options.enablePopupWorkspaceHover;
         this._wm = wm;
-        this._names = new WorkspaceNames();
+        this._names = new WorkspaceNames(wm.settings);
         // Every monitor has its own popup, so follow the stored names rather
         // than this popup's own edits to keep all of them up to date.
         this._namesChangedId = this._names.connectChanged(() => this._refreshLabels());
         this._editing = false;
         this._toggle = options.toggle || false;
         this._items = this._createThumbnails();
+        // The axis this popup was built for; changing it closes the popup.
+        this._groupAxis = this._names.groupAxis();
+        if (this._names.groupsEnabled()) {
+            options.groupAxis = this._groupAxis;
+            options.groupNames = [...Array(this._names.groupCount()).keys()]
+                .map(i => this._names.groupName(i));
+        }
+        this._groupsChangedIds = this._names.connectGroupsChanged(() => this._refreshGroups());
         this._switcherList = new WorkspaceSwitcherPopupList(this._items, this._createLabels(), options);
         this._overviewKeybindingActions = options.overveiwKeybindingActions;
         this._noModsTimeoutId = 0;
@@ -38,7 +46,9 @@ class WorkspaceSwitcherPopup extends SwitcherPopup {
 
         this._hintLabel = new St.Label({
             style_class: 'wsmatrix-hint',
-            text: 'Press r to rename the selected workspace',
+            text: this._names.groupsEnabled()
+                ? 'Press r to rename the selected workspace, g to rename its group'
+                : 'Press r to rename the selected workspace',
             visible: this._toggle,
         });
         this.add_child(this._hintLabel);
@@ -145,6 +155,32 @@ class WorkspaceSwitcherPopup extends SwitcherPopup {
         }
     }
 
+    _beginGroupRename() {
+        const index = this._switcherList._highlighted;
+        const axis = this._groupAxis;
+        if (this._editing || axis === 'none' || index === undefined || index < 0)
+            return;
+
+        const groupIndex = this._names.groupIndexOf(index);
+        this._editing = true;
+        this._switcherList.editGroup(groupIndex, this._names.customGroupName(groupIndex, axis),
+            value => {
+                // Saved for the axis the edit started on, even if the axis
+                // setting changed meanwhile and is closing this popup.
+                this._names.setGroupName(groupIndex, value, axis);
+                this._endRename();
+            },
+            () => this._endRename());
+    }
+
+    _refreshGroups() {
+        // Only names can change while open: an axis change closes the popup.
+        if (this._groupAxis === 'none' || this._names.groupAxis() !== this._groupAxis)
+            return;
+        for (let i = 0; i < this._names.groupCount(); i++)
+            this._switcherList.updateGroupText(i, this._names.groupName(i));
+    }
+
     _beginRename() {
         const index = this._switcherList._highlighted;
         if (this._editing || index === undefined || index < 0)
@@ -178,6 +214,10 @@ class WorkspaceSwitcherPopup extends SwitcherPopup {
         if (this._toggle) {
             if (_keysym === Clutter.KEY_r || _keysym === Clutter.KEY_R) {
                 this._beginRename();
+                return Clutter.EVENT_STOP;
+            }
+            if (_keysym === Clutter.KEY_g || _keysym === Clutter.KEY_G) {
+                this._beginGroupRename();
                 return Clutter.EVENT_STOP;
             }
 
@@ -240,6 +280,7 @@ class WorkspaceSwitcherPopup extends SwitcherPopup {
         this._switcherList?.finishEditing(true);
 
         this._names.disconnect(this._namesChangedId);
+        this._names.disconnectGroups(this._groupsChangedIds);
         this._names.destroy();
 
         if (this._noModsTimeoutId != 0) {

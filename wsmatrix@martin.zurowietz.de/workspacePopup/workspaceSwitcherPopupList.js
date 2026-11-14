@@ -5,6 +5,10 @@ import St from 'gi://St';
 import {WorkspaceThumbnail} from 'resource:///org/gnome/shell/ui/workspaceThumbnail.js';
 
 var ITEM_SPACING = '12px';
+// Size of the group headers relative to a cell: row headers are a column of
+// labels left of the grid, column headers a row of labels above it.
+var ROW_HEADER_RATIO = 0.6;
+var COL_HEADER_RATIO = 0.3;
 
 var SwitcherButton = GObject.registerClass(
 class SwitcherButton extends St.Button {
@@ -46,6 +50,22 @@ export default GObject.registerClass({
         this._showThumbnails = options.showThumbnails;
         this._showWorkspaceName = options.showWorkspaceNames;
         this._monitorIndex = options.monitorIndex;
+        // 'row' or 'column' when workspace groups are shown, null otherwise.
+        this._groupAxis = options.groupAxis ?? null;
+        this._headers = [];
+
+        if (this._groupAxis === 'column') {
+            this._headerRow = new St.BoxLayout({
+                style_class: 'switcher-list-item-container',
+                style: `spacing: ${ITEM_SPACING}`,
+            });
+            this.add_child(this._headerRow);
+            for (let c = 0; c < this._columns; c++) {
+                const header = this._makeHeader(options.groupNames[c]);
+                this._headers.push(header);
+                this._headerRow.add_child(header);
+            }
+        }
 
         for (let i = 0; i < this._rows; i++) {
             let workspacesRow = new St.BoxLayout({
@@ -61,6 +81,12 @@ export default GObject.registerClass({
                 this.redisplay();
             });
 
+            if (this._groupAxis === 'row') {
+                const header = this._makeHeader(options.groupNames[i]);
+                this._headers.push(header);
+                workspacesRow.add_child(header);
+            }
+
             this.add_child(workspacesRow);
             this._lists.push(workspacesRow);
         }
@@ -75,6 +101,18 @@ export default GObject.registerClass({
         for (let i = 0; i < thumbnails.length; i++) {
             this.addItem(thumbnails[i], workspaceName[i]);
         }
+    }
+
+    _makeHeader(text) {
+        const header = new St.Widget({layout_manager: new Clutter.BinLayout()});
+        header._label = new St.Label({
+            style_class: 'wsmatrix-group-header',
+            text,
+            x_align: Clutter.ActorAlign.CENTER,
+            y_align: Clutter.ActorAlign.CENTER,
+        });
+        header.add_child(header._label);
+        return header;
     }
 
     get _rows() {
@@ -150,6 +188,14 @@ export default GObject.registerClass({
             }
         }
 
+        for (const header of this._headers) {
+            if (this._groupAxis === 'row')
+                header.set_size(Math.round(this._childWidth * ROW_HEADER_RATIO), this._childHeight);
+            else
+                header.set_size(this._childWidth, Math.round(this._childHeight * COL_HEADER_RATIO));
+            header._label.style = 'font-size: ' + Math.min(this._childHeight, this._childWidth) / 8 + 'px;';
+        }
+
         let workspaceManager = global.workspace_manager;
         this.highlight(workspaceManager.get_active_workspace_index());
     }
@@ -167,16 +213,26 @@ export default GObject.registerClass({
         return Clutter.EVENT_PROPAGATE;
     }
 
-    // Overlay an editable entry on a cell, give it key focus and report the
-    // result: onCommit(text) on Enter or focus loss, onCancel() on Escape.
     editWorkspace(index, text, onCommit, onCancel) {
         const bbox = this._items[index];
-        if (!bbox) {
+        if (bbox)
+            this._overlayEntry(bbox.get_child(), text, onCommit, onCancel);
+        else
             onCancel();
-            return;
-        }
+    }
 
-        const container = bbox.get_child();
+    editGroup(groupIndex, text, onCommit, onCancel) {
+        const header = this._headers[groupIndex];
+        if (header)
+            this._overlayEntry(header, text, onCommit, onCancel);
+        else
+            onCancel();
+    }
+
+    // Overlay an editable entry on a cell or a group header, give it key focus
+    // and report the result: onCommit(text) on Enter or focus loss,
+    // onCancel() on Escape.
+    _overlayEntry(container, text, onCommit, onCancel) {
         const entry = new St.Entry({
             style_class: 'wsmatrix-rename-entry',
             text,
@@ -217,6 +273,12 @@ export default GObject.registerClass({
     // Settle an open rename entry, if any, as if it lost focus.
     finishEditing(commit) {
         this._activeEditFinish?.(commit);
+    }
+
+    updateGroupText(groupIndex, text) {
+        const header = this._headers[groupIndex];
+        if (header)
+            header._label.text = text;
     }
 
     updateWorkspaceText(index, text) {
@@ -265,6 +327,8 @@ export default GObject.registerClass({
         let padding = this.get_theme_node().get_padding(St.Side.TOP) + this.get_theme_node().get_padding(St.Side.BOTTOM);
 
         this._height = (this.get_preferred_child_size().height + this.spacing) * this._rows - this.spacing;
+        if (this._groupAxis === 'column')
+            this._height += Math.round(this._childHeight * COL_HEADER_RATIO) + this.spacing;
         return [this._height + padding, this._height + padding];
     }
 
@@ -272,6 +336,8 @@ export default GObject.registerClass({
         let padding = this.get_theme_node().get_padding(St.Side.RIGHT) + this.get_theme_node().get_padding(St.Side.LEFT);
 
         this._width = (this.get_preferred_child_size().width + this._lists[0].spacing) * this._columns - this._lists[0].spacing;
+        if (this._groupAxis === 'row')
+            this._width += Math.round(this._childWidth * ROW_HEADER_RATIO) + this._lists[0].spacing;
         return [this._width + padding, this._width + padding];
     }
 

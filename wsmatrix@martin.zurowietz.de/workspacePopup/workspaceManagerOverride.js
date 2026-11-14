@@ -125,6 +125,12 @@ export default class WorkspaceManagerOverride {
             this._destroyWorkspaceSwitcherPopup.bind(this)
         );
 
+        // The group axis changes the layout of the overview, so close it.
+        this.settingsHandlerGroupAxis = this.settings.connect(
+            'changed::group-axis',
+            this._destroyWorkspaceSwitcherPopup.bind(this)
+        );
+
         this.settingsHandlerEnablePopupWorkspaceHover = this.settings.connect(
             'changed::enable-popup-workspace-hover',
             this._destroyWorkspaceSwitcherPopup.bind(this)
@@ -141,6 +147,7 @@ export default class WorkspaceManagerOverride {
         this.settings.disconnect(this.settingsHandlerWraparoundMode);
         this.settings.disconnect(this.settingsHandlerShowWorkspaceNames);
         this.settings.disconnect(this.settingsHandlerEnablePopupWorkspaceHover);
+        this.settings.disconnect(this.settingsHandlerGroupAxis);
     }
 
     _connectLayoutManager() {

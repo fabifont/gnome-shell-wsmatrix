@@ -16,3 +16,8 @@
 .wsmatrix-indicator-label {
     padding: 0 4px;
 }
+
+.wsmatrix-group-header {
+    font-weight: bold;
+    text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}

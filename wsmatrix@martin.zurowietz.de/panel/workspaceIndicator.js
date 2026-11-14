@@ -1,14 +1,13 @@
 import Atk from 'gi://Atk';
 import Clutter from 'gi://Clutter';
-import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import GObject from 'gi://GObject';
 import Meta from 'gi://Meta';
 import St from 'gi://St';
-import Gettext from 'gettext';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import * as PanelMenu from 'resource:///org/gnome/shell/ui/panelMenu.js';
 import {SCROLL_TIMEOUT_TIME} from 'resource:///org/gnome/shell/ui/windowManager.js';
+import WorkspaceNames from '../workspaceNames.js';
 
 const POSITIONS = ['left', 'center', 'right'];
 
@@ -103,13 +102,14 @@ for (const key of [Clutter.KEY_Return, Clutter.KEY_KP_Enter, Clutter.KEY_space])
         button => button._toggleOverview());
 }
 
-// Shows the name of the active workspace in the top bar. A click opens the
-// workspace overview, scrolling switches workspaces.
+// Shows the name of the active workspace, prefixed with its group when
+// workspace groups are enabled, in the top bar. A click opens the workspace
+// overview, scrolling switches workspaces.
 export default class WorkspaceIndicator {
     constructor(settings, callbacks) {
         this._settings = settings;
         this._callbacks = callbacks;
-        this._wmPrefs = new Gio.Settings({schema_id: 'org.gnome.desktop.wm.preferences'});
+        this._names = new WorkspaceNames(settings);
         this._button = null;
         this._settingsSignals = [];
         this._wsmSignals = [];
@@ -120,8 +120,8 @@ export default class WorkspaceIndicator {
             'changed::show-panel-indicator', this._sync.bind(this)));
         this._settingsSignals.push(this._settings.connect(
             'changed::panel-indicator-position', this._replace.bind(this)));
-        this._namesSignal = this._wmPrefs.connect(
-            'changed::workspace-names', this._update.bind(this));
+        this._namesSignal = this._names.connectChanged(this._update.bind(this));
+        this._groupsSignals = this._names.connectGroupsChanged(this._update.bind(this));
 
         this._sync();
     }
@@ -129,9 +129,11 @@ export default class WorkspaceIndicator {
     disable() {
         this._settingsSignals.forEach(id => this._settings.disconnect(id));
         this._settingsSignals = [];
-        this._wmPrefs.disconnect(this._namesSignal);
+        this._names.disconnect(this._namesSignal);
+        this._names.disconnectGroups(this._groupsSignals);
         this._hide();
-        this._wmPrefs = null;
+        this._names.destroy();
+        this._names = null;
     }
 
     _sync() {
@@ -152,7 +154,10 @@ export default class WorkspaceIndicator {
         Main.panel.addToStatusArea('wsmatrix-indicator', this._button, box === 'left' ? 1 : 0, box);
 
         const wsm = global.workspace_manager;
-        ['active-workspace-changed', 'workspaces-reordered'].forEach(signal =>
+        // A different grid layout can put the active workspace in another
+        // group without switching workspaces.
+        ['active-workspace-changed', 'workspaces-reordered',
+            'notify::layout-rows', 'notify::layout-columns'].forEach(signal =>
             this._wsmSignals.push(wsm.connect(signal, this._update.bind(this))));
 
         this._update();
@@ -176,11 +181,10 @@ export default class WorkspaceIndicator {
         if (!this._button)
             return;
 
-        // Read the stored names directly: the shell may not have processed a
-        // change to them yet when this runs.
         const index = global.workspace_manager.get_active_workspace_index();
-        const names = this._wmPrefs.get_strv('workspace-names');
-        this._button.setText(names[index] ||
-            Gettext.dgettext('mutter', 'Workspace %d').replace('%d', String(index + 1)));
+        let text = this._names.workspaceName(index);
+        if (this._names.groupsEnabled())
+            text = `${this._names.groupName(this._names.groupIndexOf(index))} / ${text}`;
+        this._button.setText(text);
     }
 }

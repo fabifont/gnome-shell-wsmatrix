@@ -5,6 +5,11 @@
         <value value='2' nick='rows-columns'/>
         <value value='3' nick='next-previous-border'/>
     </enum>
+    <enum id='org.gnome.shell.extensions.wsmatrix.groupAxis'>
+        <value value='0' nick='none'/>
+        <value value='1' nick='row'/>
+        <value value='2' nick='column'/>
+    </enum>
     <enum id='org.gnome.shell.extensions.wsmatrix.panelIndicatorPosition'>
         <value value='0' nick='left'/>
         <value value='1' nick='center'/>
@@ -58,6 +63,18 @@
         <key type="b" name="multi-monitor">
             <default>true</default>
             <summary>Display popup for all monitors instead of only the primary</summary>
+        </key>
+        <key name="group-axis" enum="org.gnome.shell.extensions.wsmatrix.groupAxis">
+            <default>'none'</default>
+            <summary>Use the rows or the columns of the grid as named groups of workspaces</summary>
+        </key>
+        <key type="as" name="group-names-row">
+            <default>[]</default>
+            <summary>Group names when the rows are groups</summary>
+        </key>
+        <key type="as" name="group-names-column">
+            <default>[]</default>
+            <summary>Group names when the columns are groups</summary>
         </key>
         <key type="b" name="show-panel-indicator">
             <default>false</default>

@@ -75,6 +75,17 @@ export default class Prefs extends ExtensionPreferences {
         group.add(this._createSwitcherRow('Show workspace grid in overview', 'show-overview-grid', settings));
 
         group = new Adw.PreferencesGroup({
+            title: _('Workspace Groups'),
+        });
+        page.add(group);
+
+        group.add(this._createComboRow('Group workspaces by', 'group-axis', [
+            'None',
+            'Row',
+            'Column',
+        ], settings));
+
+        group = new Adw.PreferencesGroup({
             title: _('Panel Settings'),
         });
         page.add(group);
